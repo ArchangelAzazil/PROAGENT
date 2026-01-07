@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy-Cheap | Engineering Suite</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root { --bg: #000; --card: #0a0a0a; --text: #e6edf3; --accent: #58a6ff; --border: #30363d; --success: #238636; --fail: #f85149; --warn: #ffea00; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; transition: background 0.4s; }
+        
+        .header-main { text-align: center; padding: 60px 20px; background: var(--card); border-bottom: 2px solid var(--border); }
+        .logo-img { width: 500px; max-width: 90%; height: auto; margin-bottom: 20px; }
+        
+        .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+        .control-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+        
+        .status-led { position: absolute; top: 20px; right: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; font-size: 12px; }
+        .led { width: 12px; height: 12px; border-radius: 50%; background: #333; }
+        .led.active-green { background: var(--success); box-shadow: 0 0 10px var(--success); }
+        .led.active-red { background: var(--fail); box-shadow: 0 0 10px var(--fail); }
+        .led.active-warn { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+
+        .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .input-label { color: var(--accent); font-weight: 600; display: block; margin-bottom: 8px; font-size: 0.9em; }
+        .input-box { width: 100%; padding: 15px; box-sizing: border-box; background: #000; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 16px; outline: none; }
+        
+        .btn-run { background: var(--success); color: white; border: none; padding: 20px; border-radius: 10px; cursor: pointer; width: 100%; font-size: 18px; margin-top: 20px; font-weight: bold; transition: filter 0.2s; }
+        .btn-run:hover { filter: brightness(1.2); }
+        .btn-copy { background: #30363d; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 10px; font-weight: bold; }
+
+        .terminal { background: #000; color: #00ff41; font-family: 'Consolas', monospace; padding: 25px; border-radius: 12px; height: 420px; overflow-y: auto; border: 1px solid var(--border); margin-top: 25px; font-size: 13px; line-height: 1.8; }
+    </style>
+</head>
+<body>
+
+<div class="header-main">
+    <img src="assets/logo.png" class="logo-img" alt="Proxy-Cheap Logo">
+    <h1 style="font-size: 3.5em; margin:0; letter-spacing: 4px;">PROXY-CHEAP</h1>
+    <div style="font-size: 1.2em; opacity: 0.6; margin-top: 10px; text-transform: uppercase; letter-spacing: 2px;">Engineering Diagnostic Suite</div>
+    <div style="margin-top: 15px; font-weight: bold; color: var(--accent);">Author: Anthony Abella</div>
+</div>
+
+<div class="container">
+    <div class="control-panel">
+        <div class="status-led">
+            <span id="status-text">SYSTEM READY</span>
+            <div id="led-light" class="led"></div>
+        </div>
+        <div class="input-row">
+            <div>
+                <label class="input-label">CLIENT LOCATION</label>
+                <input type="text" id="locationInput" class="input-box" placeholder="e.g. Philippines">
+            </div>
+            <div>
+                <label class="input-label">PROXY CREDENTIALS</label>
+                <input type="text" id="proxyInput" class="input-box" placeholder="user:pass@IP:Port">
+            </div>
+        </div>
+        <button class="btn-run" onclick="runDiagnostic()">EXECUTE EXTENSIVE CHECK</button>
+        <button class="btn-copy" onclick="copyLogs()">COPY LOGS FOR SUPPORT TICKET</button>
+    </div>
+
+    <div class="terminal" id="term-body">
+        <div style="color: #444;">// Awaiting credentials...</div>
+        <div style="color: #444;">// Tools: Latency Check | TTFB Analysis | Resource Fault Detection</div>
+    </div>
+</div>
+
+<script>
+    const socket = io();
+    const led = document.getElementById('led-light');
+    const statusText = document.getElementById('status-text');
+
+    function runDiagnostic() {
+        const proxy = document.getElementById('proxyInput').value;
+        const loc = document.getElementById('locationInput').value;
+        if(!proxy || !loc) return alert("Please fill in both fields.");
+
+        document.getElementById('term-body').innerHTML = '';
+        led.className = 'led';
+        statusText.innerText = "DIAGNOSING...";
+        
+        socket.emit('run_test', { proxy, location: loc });
+    }
+
+    function copyLogs() {
+        const text = document.getElementById('term-body').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Terminal logs copied to clipboard!");
+        });
+    }
+
+    socket.on('log', (msg, color) => {
+        const line = document.createElement('div');
+        line.style.color = color || "#00ff41";
+        line.innerHTML = `<span style="color: #666;">[${new Date().toLocaleTimeString()}]</span> <span style="color: #fff;">$</span> ${msg}`;
+        const term = document.getElementById('term-body');
+        term.appendChild(line);
+        term.scrollTop = term.scrollHeight;
+
+        // Visual LED Logic
+        if(msg.includes("SUCCESS") && !msg.includes("HIGH TTFB")) { 
+            led.className = 'led active-green'; 
+            statusText.innerText = "PASS";
+        } else if (msg.includes("ALERT") || msg.includes("HIGH TTFB")) {
+            led.className = 'led active-warn';
+            statusText.innerText = "WARNING";
+        } else if(msg.includes("ERROR") || msg.includes("FAULT")) { 
+            led.className = 'led active-red'; 
+            statusText.innerText = "FAIL";
+        }
+    });
+</script>
+</body>
+</html>
