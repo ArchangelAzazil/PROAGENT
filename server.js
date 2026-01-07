@@ -21,66 +21,74 @@ io.on('connection', (socket) => {
             socket.emit('log', `INITIATING REAL-TIME TRAFFIC ANALYSIS FROM ${location.toUpperCase()}...`);
             socket.emit('log', `TARGET GATEWAY: ${proxy.split('@')[1]}`);
 
-            // Stage 1: Connectivity & Latency
+            // --- STAGE 1: LATENCY & HANDSHAKE ---
             const start = Date.now();
             socket.emit('log', `TESTING HANDSHAKE & SSL NEGOTIATION...`, "#58a6ff");
             
-            const response = await axios.get('https://www.google.com', {
+            const handshake = await axios.get('https://www.google.com', {
                 httpsAgent: agent,
                 proxy: false, 
-                timeout: 15000,
+                timeout: 10000,
                 headers: { 'User-Agent': 'Mozilla/5.0 ProAgent/1.0' }
             });
 
             const latency = Date.now() - start;
-
-            // Diagnostic Logic for Server vs Client
-            const latencyColor = latency > 1000 ? "#ffea00" : "#238636";
-
-            socket.emit('log', `-----------------------------------------------`, "#333");
             socket.emit('log', `SUCCESS: Connection established via Proxy.`);
-            socket.emit('log', `STATUS CODE: ${response.status} OK`);
-            socket.emit('log', `REAL LATENCY: ${latency}ms`, latencyColor);
+            socket.emit('log', `REAL LATENCY: ${latency}ms`, latency > 1000 ? "#ffea00" : "#238636");
 
-            // Stage 2: Detailed Diagnostic
-            socket.emit('log', `--- EXTENSIVE DIAGNOSTIC VERDICT ---`, "#aaa");
+            // --- STAGE 2: BANDWIDTH & THROUGHPUT (DOWNLOAD TEST) ---
+            socket.emit('log', `INITIATING 1MB DOWNLOAD TEST THROUGH NODE...`, "#58a6ff");
             
-            if (latency > 1500) {
-                socket.emit('log', `[ALERT] HIGH TTFB: Possible Server-Side Resource Depletion or Noisy Neighbor.`, "#ffea00");
-            } else if (latency > 800) {
-                socket.emit('log', `[INFO] Moderate Latency: Likely Geographic Distance (Client-Side).`, "#58a6ff");
-            } else {
-                socket.emit('log', `[OK] Optimal Node Health: No significant resource faults detected.`, "#238636");
-            }
+            const dlStart = Date.now();
+            // Fetching 1MB of random bytes from a reliable test endpoint
+            await axios.get('https://httpbin.org/bytes/1048576', { 
+                httpsAgent: agent,
+                proxy: false,
+                timeout: 30000 // 30s timeout for slow proxies
+            });
+            
+            const dlDuration = (Date.now() - dlStart) / 1000; // in seconds
+            const mbps = (8 / dlDuration).toFixed(2); // (1MB * 8 bits) / seconds
 
+            socket.emit('log', `DOWNLOAD SPEED: ${mbps} Mbps`, mbps < 2 ? "#ffea00" : "#238636");
+
+            // --- STAGE 3: EXTENSIVE DIAGNOSTIC VERDICT ---
             socket.emit('log', `-----------------------------------------------`, "#333");
-            socket.emit('log', `VERDICT: Proxy is responding correctly for ${location} requests.`);
+            
+            if (mbps < 1.5) {
+                socket.emit('log', `[ALERT] RESOURCE DEPLETION: Proxy node bandwidth is severely limited.`, "#f85149");
+                socket.emit('log', `[ADVICE] Rotate IP immediately to avoid behavioral detection flags.`, "#f85149");
+            } else if (latency > 1500) {
+                socket.emit('log', `[WARN] NOISY NEIGHBOR: High wait time detected. Node is likely congested.`, "#ffea00");
+            } else {
+                socket.emit('log', `[VERDICT] PROXY OPTIMAL: Healthy for ${location} requests.`, "#238636");
+            }
+            socket.emit('log', `-----------------------------------------------`, "#333");
 
         } catch (error) {
-            // Error Handling to determine fault origin
             let errorMsg = error.message;
             let faultType = "SERVER-SIDE ISSUE";
-            let color = "#f85149";
 
             if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
                 faultType = "CLIENT-SIDE ISSUE";
                 errorMsg = "Agent local network cannot reach the Proxy Gateway.";
             } else if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
-                errorMsg = "Server Wait Time Error: Resource depletion or node timeout.";
+                errorMsg = "Node Timeout: The proxy server failed to deliver data in time.";
             }
 
-            socket.emit('log', `!!! ERROR: ${errorMsg}`, color);
-            socket.emit('log', `DIAGNOSTIC FAULT: ${faultType}`, color);
+            socket.emit('log', `!!! ERROR: ${errorMsg}`, "#f85149");
+            socket.emit('log', `DIAGNOSTIC FAULT: ${faultType}`, "#f85149");
         }
     });
 });
 
-const PORT = 3000;
+// Use Render's assigned port or default to 3000 for local testing
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`
     =========================================
-    PRO-AGENT SERVER ACTIVE
-    URL: http://localhost:3000
+    PRO-AGENT SERVER ACTIVE ON PORT ${PORT}
+    URL: http://localhost:${PORT}
     Author: Anthony Abella
     =========================================
     `);
